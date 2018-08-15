@@ -1,4 +1,4 @@
-package assignment2;
+package fxbrowser;
 
 import javafx.application.Application;
 import javafx.application.Platform;
@@ -24,10 +24,10 @@ import javafx.scene.control.Alert.AlertType;
 import javafx.scene.input.*;
 import javafx.event.*;
 
-/**Assignment 2 Web Browser
+/**JavaFX Web browser
  * 
  * @author Daniel Brenot
- * @version 2016-03-15
+ * @version 2018-08-15
  *
  */
 public class MyGui extends Application
@@ -161,7 +161,7 @@ public class MyGui extends Application
 		
 		//Loads the defined home page
 		engine.load("https://google.ca/");
-	}
+	}//start()
 	
 	/**Creates a List View that displays all the webpages visited
 	 * 
@@ -195,7 +195,7 @@ public class MyGui extends Application
 			i++;
 		}
 		return found;
-	}//isBookmarkPresent
+	}//isBookmarkPresent()
 	
 	/** Displays the information about the current version of the software
 	 * 
@@ -228,7 +228,7 @@ public class MyGui extends Application
 			engine.load(getSearchURL("www.google.ca/", "java " + result.get()));
 		}
 
-	}//javaClassSearch
+	}//javaClassSearch()
 	
 	 /**
 	  * Creates a search query URL for the desired engine
