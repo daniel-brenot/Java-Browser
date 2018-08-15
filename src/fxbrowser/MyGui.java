@@ -1,30 +1,59 @@
 package fxbrowser;
 
-import javafx.application.Application;
-import javafx.application.Platform;
-import javafx.collections.FXCollections;
-import javafx.collections.ObservableList;
-import javafx.concurrent.Worker.State;
-import javafx.stage.Stage;
-import javafx.scene.web.WebView;
-import javafx.scene.web.WebEngine;
-import javafx.scene.web.WebHistory;
-import javafx.scene.web.WebHistory.Entry;
-import javafx.scene.control.cell.PropertyValueFactory;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.Serializable;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Optional;
 import javafx.animation.FadeTransition;
 import javafx.animation.ParallelTransition;
 import javafx.animation.ScaleTransition;
 import javafx.animation.SequentialTransition;
-import javafx.util.Duration;
-import javafx.scene.layout.*;
+import javafx.application.Application;
+import javafx.application.Platform;
+import javafx.beans.value.ChangeListener;
+import javafx.beans.value.ObservableValue;
+import javafx.collections.ObservableList;
+import javafx.concurrent.Worker.State;
+import javafx.event.EventHandler;
 import javafx.scene.Scene;
-import javafx.scene.control.*;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Alert.AlertType;
-import javafx.scene.input.*;
-import javafx.event.*;
+import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.CheckMenuItem;
+import javafx.scene.control.ListView;
+import javafx.scene.control.Menu;
+import javafx.scene.control.MenuBar;
+import javafx.scene.control.MenuItem;
+import javafx.scene.control.Tab;
+import javafx.scene.control.TabPane;
+import javafx.scene.control.TextField;
+import javafx.scene.control.TextInputDialog;
+import javafx.scene.control.Tooltip;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCodeCombination;
+import javafx.scene.input.KeyCombination;
+import javafx.scene.input.MouseEvent;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.VBox;
+import javafx.scene.web.WebEngine;
+import javafx.scene.web.WebHistory;
+import javafx.scene.web.WebHistory.Entry;
+import javafx.scene.web.WebView;
+import javafx.stage.DirectoryChooser;
+import javafx.stage.Stage;
+import javafx.util.Duration;
 
-/**JavaFX Web browser
+/**JavaFX Browser
  * 
  * @author Daniel Brenot
  * @version 2018-08-15
@@ -33,8 +62,6 @@ import javafx.event.*;
 public class MyGui extends Application
 {
 	
-	/** The webengine used to load home pages */
-	protected WebEngine engine;
 	/** The scene for the browser*/
 	protected Scene scene;
 	/** Stores all of the visual components for the browser*/
@@ -49,13 +76,29 @@ public class MyGui extends Application
 	protected Button bookmarkButton;
 	/** Stores the intended address that the user wishes to go to*/
 	protected TextField addressBar;
-	/** The view that displays the html of the current loaded page*/
-	protected WebView browserView;
+	
+	/**The pane that holds all the browser tabs*/
+	protected TabPane tabs;
 	/** The MenuItem that stores the bookmarks*/
 	Menu bookmarkMenu;
 	/** The view that shows all of the history of the browser*/
 	ListView<Entry> historyView = new ListView<>();
-	
+	/**The file location where the bookmarks are stored*/
+	File bookmarkFile;
+	/** The location where the downloads are stored*/
+	private static String downloadDirectory;
+	/** The location where the homepage is*/
+	private static String homepage;
+	/** The default width of the scene*/
+	private double width;
+	/** The default height of the scene*/
+	private double height;
+	/** The default x location of the stage*/
+	private double x;
+	/** The default y location of the stage*/
+	private double y;
+	/** Stores the stage of the browser*/
+	private Stage stage;
 	
 	/**Calls all the methods in the class
 	 * 
@@ -68,69 +111,65 @@ public class MyGui extends Application
 	
 	
 	@Override
-	/**Starts the GUI with the given stage
+	/** Starts the GUI with the given stage
 	 * @param primaryStage The stage used 
 	 */
 	public void start(Stage primaryStage) throws Exception
 	{
-		browserView = new WebView();
-		engine = browserView.getEngine();
 		
-		engine.getLoadWorker().stateProperty().addListener(( ov, oldState,  newState)->
-		{
-			bookmarkButton.setDisable(true);
-			backButton.setDisable(true);
-			forwardButton.setDisable(true);
-			addressBar.setText(engine.getLocation());
-			if (newState == State.SUCCEEDED)
-			{
-				primaryStage.setTitle(engine.getTitle());
-				if(engine.getHistory().getCurrentIndex() != 0)
-				{
-					backButton.setDisable(false);
-				}
-				if(engine.getHistory().getCurrentIndex()+1 < engine.getHistory().getEntries().size())
-				{
-					forwardButton.setDisable(false);
-				}
-				if(!isBookmarkPresent(engine.getLocation()))
-				{
-					bookmarkButton.setDisable(false);
-				}
-			}
-			
-		});
-		
+		stage = primaryStage;
 		root = new BorderPane();
-		scene = new Scene(root, 800, 600);
-		primaryStage.setScene(scene);
+		tabs = new TabPane();
+		
+
+		
 		
 		VBox topContainer = new VBox();
 		HBox addressContainer = new HBox();
 		addressContainer.setMaxWidth(Double.MAX_VALUE);
 		menuBar = new MenuBar();
 		root.setTop(topContainer);
-		root.setCenter(browserView);
+		root.setCenter(tabs);
 		
 		// Main Menus
 		Menu fileMenu = new Menu("File");
 		bookmarkMenu = new Menu("Bookmarks");
 		Menu helpMenu = new Menu("Help");
+		Menu settingsMenu = new Menu("Setings");
+		Menu javascriptMenu = new Menu("JavaScript");
 		
 		//File Menu
-		MenuItem quit = new MenuItem("Quit");
-		quit.setOnAction(evt -> {quitBrowser();});
-		fileMenu.getItems().addAll(quit);
+		MenuItem quit = new MenuItem("Quit");quit.setOnAction(evt -> {quitBrowser();});
+		MenuItem nTab = new MenuItem("New Tab");nTab.setOnAction(evt -> {addTab();});
+		
+		fileMenu.getItems().addAll(nTab, quit);
 		
 		//Help Menu
 		MenuItem getHelp = new MenuItem("Get help for java class");getHelp.setOnAction(evt->{javaClassSearch();});
 		MenuItem showHistory = new CheckMenuItem("Show History");showHistory.setOnAction(evt->{hideOrShow();});
 		MenuItem about = new MenuItem("About");about.setOnAction(evt->{displayAbout();});
-		helpMenu.getItems().addAll(getHelp, showHistory, about);			
+		helpMenu.getItems().addAll(getHelp, showHistory, about);	
+		
+		//Settings Menu
+		MenuItem homepageItem = new MenuItem("Homepage");homepageItem.setOnAction(evt->{setHomepage();});
+		MenuItem downloadItem = new MenuItem("Downloads");downloadItem.setOnAction(evt->{setDownloads();});
+		settingsMenu.getItems().addAll(homepageItem, downloadItem);
 			
+		//JavaScript menu
+		MenuItem executeScript = new MenuItem("Execute Code");executeScript.setOnAction(evt->{executeScript();});
+		javascriptMenu.getItems().add(executeScript);
+		
 		//Adds all of items to the top of the browser
-		menuBar.getMenus().addAll(fileMenu, bookmarkMenu, helpMenu);
+		menuBar.getMenus().addAll(fileMenu, bookmarkMenu, helpMenu, settingsMenu, javascriptMenu);
 		topContainer.getChildren().addAll(menuBar, addressContainer);
+		
+		readSettings();
+		scene = new Scene(root, width, height);
+		primaryStage.setScene(scene);
+		primaryStage.setX(x);
+		primaryStage.setY(y);
+		
+		
 		
 		EventHandler<MouseEvent> responder = new EventHandler<MouseEvent>()
 				{
@@ -143,35 +182,52 @@ public class MyGui extends Application
 				}};
 		
 		//Address bar and tools
-		backButton = new Button("Back");backButton.setOnMouseClicked(responder);
-		bookmarkButton = new Button("Add Bookmark");bookmarkButton.setOnMouseClicked(responder);
-		forwardButton = new Button("Forward");forwardButton.setOnMouseClicked(responder);
+		backButton = new Button("Back");backButton.setOnMouseClicked(responder);backButton.setTooltip(new Tooltip("Goes back 1 page in the browser history"));
+		bookmarkButton = new Button("Add Bookmark");bookmarkButton.setOnMouseClicked(responder);backButton.setTooltip(new Tooltip("Adds a bookmarked page to the browser"));
+		forwardButton = new Button("Forward");forwardButton.setOnMouseClicked(responder);forwardButton.setTooltip(new Tooltip("Goes forward 1 page in the browser history"));
 		addressBar = new TextField("https://www.google.ca/");addressBar.setOnMouseClicked(responder);
 		
 		//Causes the address bar to take up the maximum width it can
 		addressBar.setMaxWidth(Double.MAX_VALUE);
 		HBox.setHgrow(addressBar, Priority.ALWAYS);
-		addressBar.setOnKeyPressed(evt -> {if(evt.getCode().equals(KeyCode.ENTER)){engine.load(addressBar.getText());}});
+		addressBar.setOnKeyPressed(evt -> {if(evt.getCode().equals(KeyCode.ENTER)){getCurrentWebView().getEngine().load(addressBar.getText());}});
 		addressContainer.getChildren().addAll(backButton, addressBar, bookmarkButton, forwardButton);
+		addTab();
+		tabs.getSelectionModel().selectedItemProperty().addListener((ov, oldTab, newTab) ->
+		{
+	        addressBar.setText(this.getCurrentWebView().getEngine().getLocation());
+	    });
 		//Creates the history view and sets its properties
 		createHistoryView();
 		
+		//Creates the file where the bookmarks are stored
+		bookmarkFile = new File("bookmarks.txt");
+		
+		//Sets the keyboard shortcuts for each browser item
+		quit.setAccelerator(new KeyCodeCombination(KeyCode.Q, KeyCombination.CONTROL_DOWN));
+		about.setAccelerator(new KeyCodeCombination(KeyCode.B, KeyCombination.CONTROL_DOWN));
+		getHelp.setAccelerator(new KeyCodeCombination(KeyCode.H, KeyCombination.CONTROL_DOWN));
+		showHistory.setAccelerator(new KeyCodeCombination(KeyCode.Y, KeyCombination.CONTROL_DOWN));
+		nTab.setAccelerator(new KeyCodeCombination(KeyCode.T, KeyCombination.CONTROL_DOWN));
+		
+		
 		//Shows the program on the screen
 		primaryStage.show();
-		
-		//Loads the defined home page
-		engine.load("https://google.ca/");
+		primaryStage.setOnCloseRequest(evt ->
+		{
+			saveSettings();
+		});
 	}//start()
 	
-	/**Creates a List View that displays all the webpages visited
-	 * 
+	/**
+	 * Creates a List View that displays all the webpages visited
 	 */
 	public void createHistoryView()
 	{
-		historyView = new ListView<>(engine.getHistory().getEntries());
+		historyView = new ListView<>(getCurrentWebView().getEngine().getHistory().getEntries());
 		historyView.setPrefWidth(450);
 		historyView.setOnMouseClicked(evt->
-		{engine.getHistory().go(historyView.getSelectionModel().getSelectedIndex() - engine.getHistory().getCurrentIndex());});
+		{getCurrentWebView().getEngine().getHistory().go(historyView.getSelectionModel().getSelectedIndex() - getCurrentWebView().getEngine().getHistory().getCurrentIndex());});
 		historyView.setMaxWidth(0);
 		historyView.setVisible(false);
 		root.setRight(historyView);
@@ -197,8 +253,8 @@ public class MyGui extends Application
 		return found;
 	}//isBookmarkPresent()
 	
-	/** Displays the information about the current version of the software
-	 * 
+	/** 
+	 * Displays the information about the current version of the software
 	 */
 	public void displayAbout()
 	{
@@ -212,8 +268,8 @@ public class MyGui extends Application
 		alert.show();
 	}//displayAbout()
 	
-	/** Displays a dialog that will search google for the specified String
-	 * 
+	/** 
+	 * Displays a dialog that will search google for the specified String
 	 */
 	public void javaClassSearch()
 	{
@@ -225,17 +281,49 @@ public class MyGui extends Application
 		Optional<String> result = dialog.showAndWait();
 		if (result.isPresent())
 		{
-			engine.load(getSearchURL("www.google.ca/", "java " + result.get()));
+			getCurrentWebView().getEngine().load(getSearchURL("www.google.ca/", "java " + result.get()));
 		}
 
-	}//javaClassSearch()
+	}//javaClassSearch
 	
-	 /**
-	  * Creates a search query URL for the desired engine
-	* @param address The address of the engine(ex. www.google.ca/)
-	* @param query The string being searched
-	* @return The URL needed to make the query
-	*/
+	/** 
+	 * Displays a dialog that will change the homepage of the browser
+	 */
+	public void setHomepage()
+	{
+		TextInputDialog dialog = new TextInputDialog(getCurrentWebView().getEngine().getLocation());
+		dialog.setTitle("Set Homepage");
+		dialog.setHeaderText("Set the default browser homepage");
+		dialog.setContentText("What is the new homepage?");
+		
+		Optional<String> result = dialog.showAndWait();
+		if (result.isPresent())
+		{
+			homepage = result.get();
+		}
+
+	}//javaClassSearch
+	
+	/** 
+	 * Displays a dialog that will prompt the user for their preferred download directory
+	 */
+	public void setDownloads()
+	{
+		final DirectoryChooser fileChooser = new DirectoryChooser();
+		fileChooser.setInitialDirectory(new File(downloadDirectory));
+		fileChooser.setTitle("Set download Directory");
+		File file = fileChooser.showDialog(stage);
+        if (file != null && file.isDirectory()) {
+            downloadDirectory = file.getAbsolutePath();
+        }
+	}//javaClassSearch
+	
+	/**
+	 * Creates a search query URL for the desired engine
+	 * @param address The address of the engine(ex. www.google.ca/)
+	 * @param query The string being searched
+	 * @return The URL needed to make the query
+	 */
 	public static String getSearchURL(String address, String query)
 	{
 		String url = "https://"+address+"search?q=";
@@ -258,8 +346,8 @@ public class MyGui extends Application
 		return url;
 	}//getSearchUrl()
 	
-	/**Creates a dialog that asks if the user wants to quit the program
-	 * 
+	/**
+	 * Creates a dialog that asks if the user wants to quit the program
 	 */
 	public void quitBrowser()
 	{
@@ -285,14 +373,12 @@ public class MyGui extends Application
 	 */
 	public void goBack()
 	{    
-		final WebHistory history=engine.getHistory();
-		ObservableList<WebHistory.Entry> entryList=history.getEntries();
+		final WebHistory history=getCurrentWebView().getEngine().getHistory();
 		int currentIndex=history.getCurrentIndex();
 		if(currentIndex > 0)
 		{
 			Platform.runLater( () -> { 
 	    			history.go(-1); 
-	    			final String nextAddress = history.getEntries().get(currentIndex - 1).getUrl();
 			} );
 			
 	    }
@@ -303,7 +389,7 @@ public class MyGui extends Application
 	 */
 	public void goForward()
 	{    
-	    final WebHistory history=engine.getHistory();
+	    final WebHistory history=getCurrentWebView().getEngine().getHistory();
 	    ObservableList<WebHistory.Entry> entryList=history.getEntries();
 	    int currentIndex=history.getCurrentIndex();
 	    
@@ -312,18 +398,17 @@ public class MyGui extends Application
 	    		Platform.runLater(() ->
 	    		{ 
 	    			history.go(1); 
-	    			final String nextAddress = history.getEntries().get(currentIndex + 1).getUrl();
 	    		});
 	    }    
 	}//goForward()
 	
-	/**Adds a bookmark of the current page to the bookmarks array list
-	 * 
+	/**
+	 * Adds a bookmark of the current page to the bookmarks array list
 	 */
 	public void addBookmark()
 	{
-		MenuItem item = new MenuItem(engine.getLocation());
-		item.setOnAction(evt -> {engine.load(item.getText());});
+		MenuItem item = new MenuItem(getCurrentWebView().getEngine().getLocation());
+		item.setOnAction(evt -> {getCurrentWebView().getEngine().load(item.getText());});
 		bookmarkMenu.getItems().add(item);
 		bookmarkButton.setDisable(true);
 	}//addBookmark()
@@ -380,5 +465,218 @@ public class MyGui extends Application
 			
 		}
 	}//hideOrShow()
-
+	
+	/**
+	 * Saves the settings stored to the browser
+	 */
+	public void saveSettings()
+	{
+		ArrayList<String> bookmarks = new ArrayList<String>();
+		for(MenuItem item:bookmarkMenu.getItems())
+		{
+			bookmarks.add(item.getText());
+		}
+		try(ObjectOutputStream oos = new ObjectOutputStream(Files.newOutputStream(Paths.get("bookmarks.txt")));)
+		{
+			oos.writeObject(bookmarks);
+			oos.close();
+		}
+		catch (IOException e)
+		{e.printStackTrace();}
+		try(BufferedWriter oos = Files.newBufferedWriter(Paths.get("settings.txt"));)
+		{
+			oos.write(new NameValuePair("screenX", String.valueOf(stage.getX())).toString());
+			oos.newLine();
+			oos.write(new NameValuePair("screenY", String.valueOf(stage.getY())).toString());
+			oos.newLine();
+			oos.write(new NameValuePair("height", String.valueOf(scene.getHeight())).toString());
+			oos.newLine();
+			oos.write(new NameValuePair("width", String.valueOf(scene.getWidth())).toString());
+			oos.newLine();
+			oos.write(new NameValuePair("downloadDirectory", downloadDirectory).toString());
+			oos.newLine();
+			oos.write(new NameValuePair("homepage", homepage).toString());
+		}
+		catch (IOException e)
+		{e.printStackTrace();}
+	}//saveSettings()
+	
+	/**
+	 * Gets the download directory currently being used
+	 * @return the directory where downloaded files are stored
+	 */
+	public static String getDownloadDirectory()
+	{
+		return downloadDirectory;
+	}//getDownloadDirectory()
+	
+	/**
+	 * Reads the settings from a file into the browser
+	 */
+	@SuppressWarnings("unchecked")
+	public void readSettings()
+	{
+		width=800;
+		height=600;
+		x=50;
+		y=50;
+		downloadDirectory="downloads";
+		homepage="https://google.ca/";
+		if(new File("bookmarks.txt").exists())
+		{
+		ArrayList<String> bookmarks = new ArrayList<String>();
+		try(ObjectInputStream ois = new ObjectInputStream(Files.newInputStream(Paths.get("bookmarks.txt")));)
+		{
+			try
+			{
+				Object o = ois.readObject();
+				if(o instanceof ArrayList<?>)
+				{
+					bookmarks = (ArrayList<String>)o;
+				}
+			}
+			catch (ClassNotFoundException e) {e.printStackTrace();}
+			for(String str:bookmarks)
+			{
+				MenuItem item = new MenuItem(str);
+				item.setOnAction(evt -> {getCurrentWebView().getEngine().load(str);});
+				bookmarkMenu.getItems().add(item);
+			}
+		}
+		catch (IOException e)
+		{e.printStackTrace();}
+		}	
+		if(new File("settings.txt").exists())
+		{
+			try(BufferedReader reader = Files.newBufferedReader(Paths.get("settings.txt"));)
+			{
+				String str = reader.readLine();
+				x = Double.parseDouble(str.substring(str.indexOf('=')+1));
+				str = reader.readLine();
+				y = Double.parseDouble(str.substring(str.indexOf('=')+1));
+				str = reader.readLine();
+				height = Double.parseDouble(str.substring(str.indexOf('=')+1));
+				str = reader.readLine();
+				width = Double.parseDouble(str.substring(str.indexOf('=')+1));
+				str = reader.readLine();
+				downloadDirectory = str.substring(str.indexOf('=')+1);
+				str = reader.readLine();
+				homepage = str.substring(str.indexOf('=')+1);
+			}
+			catch(Exception e)
+			{e.printStackTrace();}
+		}
+	}//readSettings()
+	
+	/**
+	 * Executes user defined javascript
+	 */
+	public void executeScript()
+	{
+			TextInputDialog dialog = new TextInputDialog(getCurrentWebView().getEngine().getLocation());
+			dialog.setTitle("Execute Script");
+			dialog.setHeaderText("Execute Specified Javascript");
+			dialog.setContentText("What is the javascript you would like to run?");
+			
+			Optional<String> result = dialog.showAndWait();
+			if (result.isPresent())
+			{
+				getCurrentWebView().getEngine().executeScript(result.get());
+			}
+	}//executeScript()
+	
+	/**
+	 * Gets the currently used web view
+	 * @return the web view currently in use by the user
+	 */
+	public WebView getCurrentWebView()
+	{
+		return (WebView)(tabs.getSelectionModel().getSelectedItem().getContent());
+	}//getCurrentWebView()
+	
+	/**
+	 * Adds a webview tab to the browser
+	 */
+	public void addTab()
+	{
+		Tab tab = new Tab();
+		tabs.getTabs().add(tab);
+		tab.setText("Tab "+ tabs.getTabs().size());
+		/** The view that displays the html of the current loaded page*/
+		WebView browserView;
+		browserView = new WebView();
+		WebEngine engine = browserView.getEngine();
+		engine.setOnAlert(evt->{
+			
+			Alert alert = new Alert(AlertType.INFORMATION);
+			alert.setTitle("Alert");
+			alert.setContentText(evt.getData());
+			alert.show();
+		});
+		
+		engine.getLoadWorker().stateProperty().addListener(( ov, oldState,  newState)->
+		{
+			bookmarkButton.setDisable(true);
+			backButton.setDisable(true);
+			forwardButton.setDisable(true);
+			addressBar.setText(engine.getLocation());
+			if (newState == State.SUCCEEDED)
+			{
+				tab.setText(getCurrentWebView().getEngine().getTitle());
+				if(engine.getHistory().getCurrentIndex() != 0)
+				{
+					backButton.setDisable(false);
+				}
+				if(engine.getHistory().getCurrentIndex()+1 < engine.getHistory().getEntries().size())
+				{
+					forwardButton.setDisable(false);
+				}
+				if(!isBookmarkPresent(engine.getLocation()))
+				{
+					bookmarkButton.setDisable(false);
+				}
+			}
+			
+		});
+		
+		// monitor the location url, and if newLoc ends with one of the download file endings, create a new DownloadTask.
+			engine.locationProperty().addListener(new ChangeListener<String>() {
+				@Override public void changed(ObservableValue<? extends String> observableValue, String oldLoc, String newLocation) {
+					if(		   newLocation.endsWith(".exe") || newLocation.endsWith(".pdf") || newLocation.endsWith(".zip") 
+							|| newLocation.endsWith(".doc") || newLocation.endsWith(".docx") || newLocation.endsWith(".xls")
+							|| newLocation.endsWith(".xlsx") || newLocation.endsWith(".iso") || newLocation.endsWith(".img") 
+							|| newLocation.endsWith(".dmg") || newLocation.endsWith(".tar")  || newLocation.endsWith(".tgz")
+							|| newLocation.endsWith(".jar"))
+					{
+						new DownloadBar(newLocation);
+						goBack();
+					}
+				}
+			});	
+			browserView.setOnKeyPressed(evt->{if(evt.isControlDown()){if(evt.getCode().equals(KeyCode.LEFT)){goBack();}else if(evt.getCode().equals(KeyCode.RIGHT)){goForward();}}});
+		
+		tab.setContent(browserView);
+		engine.load(homepage);
+		
+	}//addTab()
+	
+	private class NameValuePair implements Serializable
+	{
+		static final long serialVersionUID =  58930520L; 
+		
+		private String name;
+		private String value;
+		
+		public NameValuePair(String name, String value)
+		{
+			setName(name);
+			setValue(value);
+		}//NameValuePair()
+		
+		public void setName(String name){this.name=name;}
+		public void setValue(String value){this.value=value;}
+		public String getName(){return name;}
+		public String getValue(){return value;}
+		public String toString(){return getName()+"="+getValue();}
+	}
 }
