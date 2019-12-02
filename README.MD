@@ -8,4 +8,4 @@ Absolutely not! There are no security features in this browser and it is exceedi
 
 # How do I build it?
 
-Simply rin the build.bat file or the build.sh file and the resulting JavaFXBrowser.jar should appear in the main directory
+Simply run the build.bat file or the build.sh file and the resulting JavaFXBrowser.jar should appear in the main directory
